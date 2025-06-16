@@ -3,9 +3,18 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { 
   Users, 
   UserPlus, 
@@ -18,10 +27,14 @@ import {
   Trophy,
   Settings,
   Crown,
-  Heart
+  Heart,
+  Maximize,
+  Minimize,
+  Check
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from "@/hooks/use-toast";
+import confetti from 'canvas-confetti';
 
 interface Student {
   id: string;
@@ -47,7 +60,123 @@ export default function StudentPicker() {
   const [showSetup, setShowSetup] = useState(false);
   const [spinSpeed, setSpinSpeed] = useState(50);
   const [showStats, setShowStats] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [spinDuration, setSpinDuration] = useState(2);
+  const [showSparkles, setShowSparkles] = useState(false);
+  const [showResultDialog, setShowResultDialog] = useState(false);
+  const [tempSelectedStudent, setTempSelectedStudent] = useState<Student | null>(null);
+  const [rouletteNumbers, setRouletteNumbers] = useState<number[]>([]);
+  const [showDrumroll, setShowDrumroll] = useState(false);
+  const [showFinalResult, setShowFinalResult] = useState(false);
   const { toast } = useToast();
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  const triggerConfetti = () => {
+    const duration = 3 * 1000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+    function randomInRange(min: number, max: number) {
+      return Math.random() * (max - min) + min;
+    }
+
+    const interval: any = setInterval(function() {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        return clearInterval(interval);
+      }
+
+      const particleCount = 50 * (timeLeft / duration);
+
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+        colors: ['#FF1493', '#9400D3', '#4B0082']
+      });
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+        colors: ['#FF1493', '#9400D3', '#4B0082']
+      });
+    }, 250);
+  };
+
+  // シャッフルアニメーション用の数字配列を生成
+  const generateRouletteNumbers = () => {
+    const numbers = students.map(s => s.number);
+    const shuffled = [];
+    for (let i = 0; i < 20; i++) {
+      shuffled.push(...numbers.sort(() => Math.random() - 0.5));
+    }
+    return shuffled;
+  };
+
+  const selectRandomStudent = () => {
+    if (students.length === 0) return;
+
+    setIsSpinning(true);
+    setShowSparkles(true);
+    setShowDrumroll(true);
+    setShowFinalResult(false);
+    
+    // スロット効果用の数字配列を生成（より多くの数字を生成）
+    const allNumbers = [];
+    for (let i = 0; i < 50; i++) {
+      allNumbers.push(Math.floor(Math.random() * (parseInt(endNumber) - parseInt(startNumber) + 1)) + parseInt(startNumber));
+    }
+    setRouletteNumbers(allNumbers);
+
+    // 最終的に選ばれる学生を先に決定
+    const finalStudent = students[Math.floor(Math.random() * students.length)];
+    
+    // スロットアニメーションの時間を1.5秒に短縮
+    setTimeout(() => {
+      setShowDrumroll(false);
+      setShowFinalResult(true);
+      setTempSelectedStudent(finalStudent);
+      
+      // 選択された学生の情報を更新
+      const updatedStudents = students.map(student => {
+        if (student.id === finalStudent.id) {
+          return {
+            ...student,
+            presentedCount: student.presentedCount + 1,
+            lastSelected: new Date(),
+            streak: student.streak + 1,
+          };
+        }
+        return { ...student, streak: 0 };
+      });
+      
+      setStudents(updatedStudents);
+      setHistory([...history, { studentNumber: finalStudent.number, timestamp: new Date() }]);
+      setIsSpinning(false);
+      setShowSparkles(false);
+      
+      // 演出とポップアップのタイミングを調整
+      triggerConfetti();
+      setShowResultDialog(true); // 即座に表示
+    }, 1500); // 1.5秒に短縮
+  };
+
+  const handleConfirmResult = () => {
+    setSelectedStudent(tempSelectedStudent);
+    setShowResultDialog(false);
+  };
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -108,45 +237,6 @@ export default function StudentPicker() {
     });
   };
 
-  const selectStudent = () => {
-    if (students.length === 0) {
-      toast({
-        title: "エラー",
-        description: "学生が登録されていません",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsSpinning(true);
-    let count = 0;
-    const maxCount = 20 + Math.floor(Math.random() * 10);
-    const interval = setInterval(() => {
-      const randomIndex = Math.floor(Math.random() * students.length);
-      const tempSelected = students[randomIndex];
-      setSelectedStudent(tempSelected);
-      count++;
-
-      if (count >= maxCount) {
-        clearInterval(interval);
-        setIsSpinning(false);
-        const updatedStudents = students.map(student => {
-          if (student.id === tempSelected.id) {
-            return {
-              ...student,
-              presentedCount: student.presentedCount + 1,
-              lastSelected: new Date(),
-              streak: student.streak + 1
-            };
-          }
-          return { ...student, streak: 0 };
-        });
-        setStudents(updatedStudents);
-        setHistory([...history, { studentNumber: tempSelected.number, timestamp: new Date() }]);
-      }
-    }, spinSpeed);
-  };
-
   const resetPresentedCounts = () => {
     const updatedStudents = students.map(student => ({
       ...student,
@@ -176,52 +266,190 @@ export default function StudentPicker() {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-2">
-            <Users className="h-6 w-6" />
-            ランダム指名ルーレット
-          </CardTitle>
-          <CardDescription>
-            公平で楽しい指名のためのツール
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <Button
-                onClick={() => setShowSetup(!showSetup)}
-                variant="outline"
-                className="w-full"
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                設定
-              </Button>
-              <Button
-                onClick={() => setShowHistory(!showHistory)}
-                variant="outline"
-                className="w-full"
-              >
-                <History className="mr-2 h-4 w-4" />
-                履歴
-              </Button>
-              <Button
-                onClick={() => setShowStats(!showStats)}
-                variant="outline"
-                className="w-full"
-              >
-                <Trophy className="mr-2 h-4 w-4" />
-                統計
-              </Button>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-7xl mx-auto space-y-6"
+      >
+        <div className="flex justify-between items-center">
+          <h1 className="text-4xl font-bold text-purple-900">ランダム抽選ルーレット</h1>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={toggleFullscreen}
+            className="hover:bg-purple-100"
+          >
+            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </Button>
+        </div>
 
-            {showSetup && (
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="text-lg">クラス設定</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-6 w-6 text-purple-500" />
+                抽選エリア
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="relative flex flex-col items-center justify-center min-h-[400px] bg-gradient-to-b from-purple-900 to-black rounded-xl p-8">
+                {/* ドラムロールエフェクト改善 */}
+                {showDrumroll && (
+                  <motion.div 
+                    className="absolute inset-0 flex items-center justify-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    <div className="relative w-full h-48 overflow-hidden flex justify-center items-center">
+                      <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-purple-900 to-transparent z-10" />
+                      <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black to-transparent z-10" />
+                      
+                      {/* 3列のスロット */}
+                      <div className="flex gap-4">
+                        {[0, 1, 2].map((col) => (
+                          <motion.div
+                            key={col}
+                            className="flex flex-col items-center"
+                            initial={{ y: 0 }}
+                            animate={{ 
+                              y: [-2000, 0],
+                            }}
+                            transition={{ 
+                              duration: 1.5,
+                              ease: [0.45, 0.05, 0.55, 0.95],
+                              times: [0, 1],
+                            }}
+                          >
+                            {rouletteNumbers.map((num, index) => (
+                              <div
+                                key={`${col}-${index}`}
+                                className="text-8xl font-bold text-white mb-8 tabular-nums"
+                                style={{
+                                  textShadow: "0 0 20px rgba(255,255,255,0.5)",
+                                  transform: `translateZ(0)`,
+                                }}
+                              >
+                                {Math.floor(Math.random() * (parseInt(endNumber) - parseInt(startNumber) + 1)) + parseInt(startNumber)}
+                              </div>
+                            ))}
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* 最終結果の表示 */}
+                <AnimatePresence>
+                  {showFinalResult && tempSelectedStudent && (
+                    <motion.div
+                      initial={{ scale: 2, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.5, opacity: 0 }}
+                      transition={{ type: "spring", damping: 15, duration: 0.5 }}
+                      className="text-center"
+                    >
+                      <motion.div
+                        className="text-9xl font-bold text-white mb-4 tabular-nums"
+                        style={{ 
+                          textShadow: "0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(147,51,234,0.6)" 
+                        }}
+                        animate={{
+                          scale: [1, 1.1, 1],
+                          textShadow: [
+                            "0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(147,51,234,0.6)",
+                            "0 0 50px rgba(255,255,255,0.9), 0 0 80px rgba(147,51,234,0.8)",
+                            "0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(147,51,234,0.6)"
+                          ]
+                        }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          repeatType: "reverse"
+                        }}
+                      >
+                        {tempSelectedStudent.number}
+                      </motion.div>
+                      {tempSelectedStudent.streak > 1 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.5 }}
+                        >
+                          <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-lg px-4 py-2">
+                            {tempSelectedStudent.streak}連続
+                          </Badge>
+                        </motion.div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {!showDrumroll && !showFinalResult && !selectedStudent && (
+                  <motion.div
+                    animate={{ 
+                      opacity: [0.5, 1, 0.5],
+                      scale: [0.95, 1.05, 0.95],
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                    }}
+                    className="text-8xl font-bold text-white/50"
+                    style={{ textShadow: "0 0 20px rgba(255,255,255,0.3)" }}
+                  >
+                    ? ? ?
+                  </motion.div>
+                )}
+              </div>
+
+              <div className="flex justify-center gap-4 mt-6">
+                <Button
+                  size="lg"
+                  onClick={selectRandomStudent}
+                  disabled={isSpinning || students.length === 0}
+                  className="relative overflow-hidden bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-6 text-lg transform hover:scale-105 transition-transform"
+                >
+                  {isSpinning && (
+                    <motion.div
+                      className="absolute inset-0 bg-white/20"
+                      animate={{
+                        x: ["0%", "100%"],
+                      }}
+                      transition={{
+                        duration: 1,
+                        repeat: Infinity,
+                        ease: "linear",
+                      }}
+                    />
+                  )}
+                  <Shuffle className="mr-2 h-6 w-6" />
+                  {isSpinning ? "選択中..." : "抽選開始"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={resetPresentedCounts}
+                  disabled={!selectedStudent}
+                  className="hover:bg-purple-100"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  リセット
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5 text-purple-500" />
+                  設定
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
                   <div className="flex gap-4">
                     <div className="flex-1">
                       <label className="text-sm font-medium">開始番号</label>
@@ -229,7 +457,7 @@ export default function StudentPicker() {
                         type="number"
                         value={startNumber}
                         onChange={(e) => setStartNumber(e.target.value)}
-                        min="1"
+                        className="mt-1"
                       />
                     </div>
                     <div className="flex-1">
@@ -238,117 +466,154 @@ export default function StudentPicker() {
                         type="number"
                         value={endNumber}
                         onChange={(e) => setEndNumber(e.target.value)}
-                        min="1"
+                        className="mt-1"
                       />
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button onClick={initializeStudents} className="flex-1">
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      学生を登録
-                    </Button>
-                    <Button onClick={resetPresentedCounts} variant="destructive" className="flex-1">
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      記録をリセット
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {showHistory && (
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="text-lg">指名履歴</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {history.slice().reverse().map((entry, index) => (
-                      <div key={index} className="flex justify-between items-center text-sm">
-                        <span>{entry.studentNumber}番</span>
-                        <span className="text-gray-500">
-                          {new Date(entry.timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {showStats && (
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="text-lg">統計情報</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {students.length > 0 && (
-                      <>
-                        <div className="flex justify-between items-center">
-                          <span>総指名回数:</span>
-                          <Badge variant="secondary">{getStudentStats().totalPresentations}回</Badge>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span>最多指名回数:</span>
-                          <Badge variant="secondary">{getStudentStats().maxPresentations}回</Badge>
-                        </div>
-                        {(() => {
-                          const stats = getStudentStats();
-                          return stats.streakHolder && (
-                            <div className="flex justify-between items-center">
-                              <span>現在の最長連続指名:</span>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary">
-                                  {stats.streakHolder.number}番
-                                </Badge>
-                                <Badge variant="secondary">
-                                  {stats.maxStreak}回連続
-                                </Badge>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="text-center p-8 bg-slate-50 rounded-lg">
-              {selectedStudent ? (
-                <div className="space-y-2">
-                  <div className="text-6xl font-bold text-primary animate-pulse">
-                    {selectedStudent.number}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    指名回数: {selectedStudent.presentedCount}回
-                    {selectedStudent.streak > 1 && (
-                      <span className="ml-2">
-                        <Badge variant="secondary">
-                          {selectedStudent.streak}回連続
-                        </Badge>
-                      </span>
-                    )}
-                  </div>
+                  <Button
+                    onClick={initializeStudents}
+                    className="w-full bg-purple-600 hover:bg-purple-700"
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    番号を設定
+                  </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-purple-500" />
+                  統計情報
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {students.length > 0 ? (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">合計人数:</span>
+                        <Badge variant="secondary">{students.length}人</Badge>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">未選択:</span>
+                        <Badge variant="secondary">
+                          {students.filter(s => s.presentedCount === 0).length}人
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">最多選択回数:</span>
+                        <Badge variant="secondary">
+                          {Math.max(...students.map(s => s.presentedCount))}回
+                        </Badge>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center text-gray-500">
+                      データがありません
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-purple-500" />
+              履歴
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {history.length > 0 ? (
+                history.slice().reverse().map((entry, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex items-center gap-4 p-2 rounded-lg hover:bg-purple-50"
+                  >
+                    <Badge variant="outline">#{entry.studentNumber}</Badge>
+                    <span className="text-sm text-gray-600">
+                      {new Date(entry.timestamp).toLocaleString()}
+                    </span>
+                  </motion.div>
+                ))
               ) : (
-                <div className="text-4xl text-gray-400">?</div>
+                <div className="text-center text-gray-500 py-4">
+                  履歴はありません
+                </div>
               )}
             </div>
+          </CardContent>
+        </Card>
 
-            <Button
-              onClick={selectStudent}
-              disabled={isSpinning || students.length === 0}
-              className="w-full h-16 text-lg"
-            >
-              <Shuffle className="mr-2 h-6 w-6" />
-              {isSpinning ? "選択中..." : "ランダム指名"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* 結果ダイアログの表示を即時に */}
+        <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
+          <DialogContent className="sm:max-w-md bg-gradient-to-b from-purple-900 to-black border-purple-500">
+            <DialogHeader>
+              <DialogTitle className="text-center text-2xl font-bold text-white">
+                選ばれたのは...
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col items-center justify-center py-8">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{
+                  type: "spring",
+                  damping: 12,
+                  duration: 0.3
+                }}
+                className="relative"
+              >
+                <div 
+                  className="text-9xl font-bold text-white mb-4"
+                  style={{ 
+                    textShadow: "0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(147,51,234,0.6)" 
+                  }}
+                >
+                  {tempSelectedStudent?.number}
+                </div>
+                {tempSelectedStudent?.streak && tempSelectedStudent.streak > 1 && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute -top-4 -right-4"
+                  >
+                    <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500">
+                      {tempSelectedStudent.streak}連続
+                    </Badge>
+                  </motion.div>
+                )}
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="mt-4 text-white/80"
+              >
+                選ばれた回数: {tempSelectedStudent?.presentedCount}回
+              </motion.div>
+            </div>
+            <DialogFooter className="sm:justify-center">
+              <Button
+                type="button"
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                onClick={handleConfirmResult}
+              >
+                <Check className="mr-2 h-4 w-4" />
+                OK
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </motion.div>
     </div>
   );
 }
