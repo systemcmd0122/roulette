@@ -293,19 +293,22 @@ export default function StudentPicker() {
                           <span>最多指名回数:</span>
                           <Badge variant="secondary">{getStudentStats().maxPresentations}回</Badge>
                         </div>
-                        {getStudentStats().streakHolder && (
-                          <div className="flex justify-between items-center">
-                            <span>現在の最長連続指名:</span>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary">
-                                {getStudentStats().streakHolder.number}番
-                              </Badge>
-                              <Badge variant="secondary">
-                                {getStudentStats().maxStreak}回連続
-                              </Badge>
+                        {(() => {
+                          const stats = getStudentStats();
+                          return stats.streakHolder && (
+                            <div className="flex justify-between items-center">
+                              <span>現在の最長連続指名:</span>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">
+                                  {stats.streakHolder.number}番
+                                </Badge>
+                                <Badge variant="secondary">
+                                  {stats.maxStreak}回連続
+                                </Badge>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </>
                     )}
                   </div>
