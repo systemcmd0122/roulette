@@ -338,8 +338,8 @@ export default function StudentPicker() {
       if (i === REEL_CENTER_INDEX) {
         reel.push(finalStudent.number);
       } else {
-        const idx = Math.floor(Math.random() * activeCandidates.length);
-        reel.push(activeCandidates[idx].number);
+        const idx = Math.floor(Math.random() * eligibleCandidates.length);
+        reel.push(eligibleCandidates[idx].number);
       }
     }
     setRouletteNumbers(reel);
@@ -428,6 +428,13 @@ export default function StudentPicker() {
   const handleLoadProfile = (id: string) => {
     const profile = classProfiles.find(p => p.id === id);
     if (!profile) return;
+
+    if (history.length > 0) {
+      if (!window.confirm(`クラス「${profile.name}」を読み込むと、現在の指名履歴と回数の記録はすべて失われます。よろしいですか？`)) {
+        return;
+      }
+    }
+
     setStartNumber(profile.startNumber);
     setEndNumber(profile.endNumber);
     setSelectionMode(profile.selectionMode);
@@ -457,6 +464,10 @@ export default function StudentPicker() {
   };
 
   const handleDeleteProfile = (id: string) => {
+    const profile = classProfiles.find(p => p.id === id);
+    if (!window.confirm(`クラス「${profile?.name ?? ''}」を削除しますか？この操作は取り消せません。`)) {
+      return;
+    }
     const updated = classProfiles.filter(p => p.id !== id);
     setClassProfiles(updated);
     if (currentProfileId === id) {
@@ -479,7 +490,13 @@ export default function StudentPicker() {
       });
       return;
     }
-    
+
+    if (history.length > 0) {
+      if (!window.confirm('この範囲で初期化すると、現在の指名履歴と回数の記録はすべて失われます。よろしいですか？')) {
+        return;
+      }
+    }
+
     const newStudents: Student[] = [];
     for (let i = start; i <= end; i++) {
       newStudents.push({
@@ -498,6 +515,9 @@ export default function StudentPicker() {
   };
 
   const resetPresentedCounts = () => {
+    if (!window.confirm('本当に指名履歴と回数の記録をすべてリセットしますか？この操作は取り消せません。')) {
+      return;
+    }
     const updatedStudents = students.map(student => ({
       ...student,
       presentedCount: 0,
@@ -597,7 +617,7 @@ export default function StudentPicker() {
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <div className="relative w-full h-full max-h-[300px] overflow-hidden flex justify-center items-center">
+                    <div className="relative w-full h-full overflow-hidden flex justify-center items-center">
                       {/* 上下のグラデーションシャドウ */}
                       <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-purple-900 to-transparent z-20 pointer-events-none" />
                       <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-black to-transparent z-20 pointer-events-none" />
@@ -759,7 +779,7 @@ export default function StudentPicker() {
                 <Button
                   variant="outline"
                   onClick={resetPresentedCounts}
-                  disabled={!selectedStudent}
+                  disabled={students.length === 0}
                   className={`hover:bg-purple-100 border-purple-200 text-purple-700 font-bold ${
                     isFullscreen ? "py-5 px-6 text-base sm:py-6 sm:px-8 sm:text-lg rounded-2xl border-white/20 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white" : ""
                   }`}
