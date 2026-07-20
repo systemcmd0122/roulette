@@ -75,10 +75,12 @@
   }
 }
 
-/* アニメーションのスムーズ化 */
-* {
-  transition: all 0.2s ease-in-out;
-}
+/* アニメーションのスムーズ化
+   ⚠️ 以前ここにあった `* { transition: all 0.2s ease-in-out; }` は削除しました。
+   全要素に transition-all をかけると、Framer Motion が transform/opacity を
+   毎フレーム直接書き換えているルーレットの数字表示と競合し、
+   カクつき・チラつき（ガクガクした変なアニメーション）の原因になっていました。
+   必要なコンポーネントには Tailwind の `transition-*` クラスを個別に付けています。 */
 
 /* スクロールバーのカスタマイズ */
 ::-webkit-scrollbar {
@@ -97,10 +99,4 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: theme('colors.purple.400');
-}
-
-/* フルスクリーンモードのスタイル */
-:fullscreen {
-  background: theme('colors.purple.50');
-  padding: 2rem;
 }
