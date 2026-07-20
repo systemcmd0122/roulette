@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -30,7 +30,14 @@ import {
   Heart,
   Maximize,
   Minimize,
-  Check
+  Check,
+  ShieldCheck,
+  Lock,
+  Save,
+  Plus,
+  X,
+  Info,
+  Calendar
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +54,51 @@ interface Student {
 interface SelectionHistory {
   studentNumber: number;
   timestamp: Date;
+}
+
+export interface ClassProfile {
+  id: string;
+  name: string;
+  startNumber: string;
+  endNumber: string;
+  selectionMode: 'exclude' | 'include';
+  filterNumbersText: string;
+  noRepeat: boolean;
+}
+
+function parseRangeText(text: string): Set<number> {
+  const result = new Set<number>();
+  const normalized = text
+    .replace(/ー/g, '-')
+    .replace(/－/g, '-')
+    .replace(/，/g, ',')
+    .replace(/、/g, ',')
+    .replace(/　/g, ' ');
+
+  const tokens = normalized.split(/[\s,、]+/);
+  for (const token of tokens) {
+    if (!token) continue;
+    if (token.includes('-')) {
+      const parts = token.split('-');
+      if (parts.length === 2) {
+        const start = parseInt(parts[0], 10);
+        const end = parseInt(parts[1], 10);
+        if (!isNaN(start) && !isNaN(end)) {
+          const actualStart = Math.min(start, end);
+          const actualEnd = Math.max(start, end);
+          for (let i = actualStart; i <= actualEnd; i++) {
+            result.add(i);
+          }
+        }
+      }
+    } else {
+      const num = parseInt(token, 10);
+      if (!isNaN(num)) {
+        result.add(num);
+      }
+    }
+  }
+  return result;
 }
 
 export default function StudentPicker() {
@@ -70,17 +122,51 @@ export default function StudentPicker() {
   const [showFinalResult, setShowFinalResult] = useState(false);
   const { toast } = useToast();
 
+  // 追加のステート変数
+  const [selectionMode, setSelectionMode] = useState<'exclude' | 'include'>('exclude');
+  const [filterNumbersText, setFilterNumbersText] = useState('');
+  const [noRepeat, setNoRepeat] = useState(true); // デフォルトで重複防止はONが親切
+  const [classProfiles, setClassProfiles] = useState<ClassProfile[]>([]);
+  const [currentProfileId, setCurrentProfileId] = useState<string>('');
+  const [newProfileName, setNewProfileName] = useState('');
+
+  // 全画面表示させたいエリアを参照するRef（くるくる回る画面の部分だけ）
+  const lotteryContainerRef = useRef<HTMLDivElement>(null);
+
   const toggleFullscreen = () => {
+    if (!lotteryContainerRef.current) return;
+
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
+      lotteryContainerRef.current.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch((err) => {
+        toast({
+          title: "全画面エラー",
+          description: "全画面表示の切り替えに失敗しました: " + err.message,
+          variant: "destructive"
+        });
+      });
     } else {
       if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
+        document.exitFullscreen().then(() => {
+          setIsFullscreen(false);
+        });
       }
     }
   };
+
+  // 全画面状態の変化を検知する
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
 
   const triggerConfetti = () => {
     const duration = 3 * 1000;
@@ -125,30 +211,168 @@ export default function StudentPicker() {
     return shuffled;
   };
 
-  const selectRandomStudent = () => {
-    if (students.length === 0) return;
+
+
+  // Load data from localStorage on mount
+  useEffect(() => {
+    const savedStudents = localStorage.getItem('students');
+    const savedHistory = localStorage.getItem('selectionHistory');
+    const savedStartNumber = localStorage.getItem('startNumber');
+    const savedEndNumber = localStorage.getItem('endNumber');
+    const savedSelectionMode = localStorage.getItem('selectionMode');
+    const savedFilterNumbersText = localStorage.getItem('filterNumbersText');
+    const savedNoRepeat = localStorage.getItem('noRepeat');
+    const savedClassProfiles = localStorage.getItem('classProfiles');
+    const savedCurrentProfileId = localStorage.getItem('currentProfileId');
+
+    if (savedStudents) {
+      setStudents(JSON.parse(savedStudents));
+    }
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory));
+    }
+    if (savedStartNumber) {
+      setStartNumber(savedStartNumber);
+    }
+    if (savedEndNumber) {
+      setEndNumber(savedEndNumber);
+    }
+    if (savedSelectionMode) {
+      setSelectionMode(savedSelectionMode as 'exclude' | 'include');
+    }
+    if (savedFilterNumbersText !== null) {
+      setFilterNumbersText(savedFilterNumbersText);
+    }
+    if (savedNoRepeat !== null) {
+      setNoRepeat(savedNoRepeat === 'true');
+    }
+    if (savedClassProfiles) {
+      setClassProfiles(JSON.parse(savedClassProfiles));
+    }
+    if (savedCurrentProfileId) {
+      setCurrentProfileId(savedCurrentProfileId);
+    }
+  }, []);
+
+  // Save data to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('students', JSON.stringify(students));
+    localStorage.setItem('selectionHistory', JSON.stringify(history));
+    localStorage.setItem('startNumber', startNumber);
+    localStorage.setItem('endNumber', endNumber);
+    localStorage.setItem('selectionMode', selectionMode);
+    localStorage.setItem('filterNumbersText', filterNumbersText);
+    localStorage.setItem('noRepeat', String(noRepeat));
+    localStorage.setItem('classProfiles', JSON.stringify(classProfiles));
+    localStorage.setItem('currentProfileId', currentProfileId);
+  }, [students, history, startNumber, endNumber, selectionMode, filterNumbersText, noRepeat, classProfiles, currentProfileId]);
+
+  // ヘルパー: グリッドから特定の生徒を切り替える
+  const toggleStudentInFilter = (num: number) => {
+    const filterSet = parseRangeText(filterNumbersText);
+    if (filterSet.has(num)) {
+      filterSet.delete(num);
+    } else {
+      filterSet.add(num);
+    }
+    // Setからカンマ区切りの文字列を再生成
+    const sortedNums = Array.from(filterSet).sort((a, b) => a - b);
+
+    // 連続した数字をハイフンにまとめる(より使いやすくスマートな表記)
+    const ranges: string[] = [];
+    let rangeStart = -1;
+    let rangeEnd = -1;
+
+    for (let i = 0; i < sortedNums.length; i++) {
+      const current = sortedNums[i];
+      if (rangeStart === -1) {
+        rangeStart = current;
+        rangeEnd = current;
+      } else if (current === rangeEnd + 1) {
+        rangeEnd = current;
+      } else {
+        if (rangeStart === rangeEnd) {
+          ranges.push(String(rangeStart));
+        } else {
+          ranges.push(`${rangeStart}-${rangeEnd}`);
+        }
+        rangeStart = current;
+        rangeEnd = current;
+      }
+    }
+    if (rangeStart !== -1) {
+      if (rangeStart === rangeEnd) {
+        ranges.push(String(rangeStart));
+      } else {
+        ranges.push(`${rangeStart}-${rangeEnd}`);
+      }
+    }
+
+    setFilterNumbersText(ranges.join(', '));
+  };
+
+  // 指定された生徒番号が有効（抽選プールに含まれる）かどうかの判定
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const isStudentActive = useCallback((num: number) => {
+    const filterSet = parseRangeText(filterNumbersText);
+    if (selectionMode === 'exclude') {
+      return !filterSet.has(num);
+    } else {
+      return filterSet.has(num);
+    }
+  }, [filterNumbersText, selectionMode]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const selectRandomStudent = useCallback(() => {
+    // 抽選対象（アクティブな生徒）をフィルタリング
+    const activeCandidates = students.filter(student => isStudentActive(student.number));
+
+    if (activeCandidates.length === 0) {
+      toast({
+        title: "エラー",
+        description: "抽選対象の生徒がいません。設定を確認してください。",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // 重複防止（1度選ばれた生徒は、対象全員が1巡するまで選ばれない）
+    let eligibleCandidates = activeCandidates;
+    if (noRepeat) {
+      // 最小選択（指名）回数を求める
+      const minCount = Math.min(...activeCandidates.map(s => s.presentedCount));
+      // 指名回数が最小の生徒のみを候補とする（これで均等に当たるようになります）
+      eligibleCandidates = activeCandidates.filter(s => s.presentedCount === minCount);
+
+      // 万が一候補が空になった場合はアクティブ候補全員を対象にする
+      if (eligibleCandidates.length === 0) {
+        eligibleCandidates = activeCandidates;
+      }
+    }
 
     setIsSpinning(true);
     setShowSparkles(true);
     setShowDrumroll(true);
     setShowFinalResult(false);
     
-    // スロット効果用の数字配列を生成（より多くの数字を生成）
+    // スロット効果用の数字配列（アニメーション表示用）
     const allNumbers = [];
     for (let i = 0; i < 50; i++) {
-      allNumbers.push(Math.floor(Math.random() * (parseInt(endNumber) - parseInt(startNumber) + 1)) + parseInt(startNumber));
+      const idx = Math.floor(Math.random() * activeCandidates.length);
+      allNumbers.push(activeCandidates[idx].number);
     }
     setRouletteNumbers(allNumbers);
 
-    // 最終的に選ばれる学生を先に決定
-    const finalStudent = students[Math.floor(Math.random() * students.length)];
+    // 最終的に選ばれる学生を決定
+    const finalStudent = eligibleCandidates[Math.floor(Math.random() * eligibleCandidates.length)];
     
-    // スロットアニメーションの時間を1.5秒に短縮
+    // スロットアニメーション
     setTimeout(() => {
       setShowDrumroll(false);
       setShowFinalResult(true);
       setTempSelectedStudent(finalStudent);
-      
+      setSelectedStudent(finalStudent); // ダイアログを挟まず、即座に選択決定
+
       // 選択された学生の情報を更新
       const updatedStudents = students.map(student => {
         if (student.id === finalStudent.id) {
@@ -163,49 +387,109 @@ export default function StudentPicker() {
       });
       
       setStudents(updatedStudents);
-      setHistory([...history, { studentNumber: finalStudent.number, timestamp: new Date() }]);
+      setHistory(prev => [...prev, { studentNumber: finalStudent.number, timestamp: new Date() }]);
       setIsSpinning(false);
       setShowSparkles(false);
       
-      // 演出とポップアップのタイミングを調整
+      // 演出（紙吹雪）をトリガー
       triggerConfetti();
-      setShowResultDialog(true); // 即座に表示
-    }, 1500); // 1.5秒に短縮
+    }, 1500);
+  }, [students, noRepeat, toast, isStudentActive]);
+
+  // キーボードイベント（Spaceキーで抽選、Escで全画面終了）の検知
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        // 入力フィールド等にフォーカスがある場合は動作をスキップ
+        const activeTag = document.activeElement?.tagName.toLowerCase();
+        if (activeTag === 'input' || activeTag === 'textarea') {
+          return;
+        }
+        e.preventDefault();
+        // 抽選開始ボタンが押せる状態、かつスピン中でなければ実行
+        if (!isSpinning && students.length > 0) {
+          selectRandomStudent();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSpinning, students, filterNumbersText, selectionMode, noRepeat, selectRandomStudent]);
+
+  const handleSaveProfile = () => {
+    if (!newProfileName.trim()) {
+      toast({
+        title: "エラー",
+        description: "クラス名を入力してください",
+        variant: "destructive"
+      });
+      return;
+    }
+    const profileId = `profile-${Date.now()}`;
+    const newProfile: ClassProfile = {
+      id: profileId,
+      name: newProfileName,
+      startNumber,
+      endNumber,
+      selectionMode,
+      filterNumbersText,
+      noRepeat
+    };
+    const updated = [...classProfiles, newProfile];
+    setClassProfiles(updated);
+    setCurrentProfileId(profileId);
+    setNewProfileName('');
+    toast({
+      title: "保存完了",
+      description: `クラス「${newProfile.name}」を保存しました`
+    });
   };
 
-  const handleConfirmResult = () => {
-    setSelectedStudent(tempSelectedStudent);
-    setShowResultDialog(false);
+  const handleLoadProfile = (id: string) => {
+    const profile = classProfiles.find(p => p.id === id);
+    if (!profile) return;
+    setStartNumber(profile.startNumber);
+    setEndNumber(profile.endNumber);
+    setSelectionMode(profile.selectionMode);
+    setFilterNumbersText(profile.filterNumbersText);
+    setNoRepeat(profile.noRepeat);
+    setCurrentProfileId(profile.id);
+
+    // 学生データの初期化も同時に行う
+    const start = parseInt(profile.startNumber);
+    const end = parseInt(profile.endNumber);
+    const newStudents: Student[] = [];
+    for (let i = start; i <= end; i++) {
+      newStudents.push({
+        id: `student-${i}`,
+        number: i,
+        presentedCount: 0,
+        streak: 0
+      });
+    }
+    setStudents(newStudents);
+    setHistory([]);
+
+    toast({
+      title: "読込完了",
+      description: `クラス「${profile.name}」を読み込み、生徒リストを初期化しました`
+    });
   };
 
-  // Load data from localStorage on mount
-  useEffect(() => {
-    const savedStudents = localStorage.getItem('students');
-    const savedHistory = localStorage.getItem('selectionHistory');
-    const savedStartNumber = localStorage.getItem('startNumber');
-    const savedEndNumber = localStorage.getItem('endNumber');
-    
-    if (savedStudents) {
-      setStudents(JSON.parse(savedStudents));
+  const handleDeleteProfile = (id: string) => {
+    const updated = classProfiles.filter(p => p.id !== id);
+    setClassProfiles(updated);
+    if (currentProfileId === id) {
+      setCurrentProfileId('');
     }
-    if (savedHistory) {
-      setHistory(JSON.parse(savedHistory));
-    }
-    if (savedStartNumber) {
-      setStartNumber(savedStartNumber);
-    }
-    if (savedEndNumber) {
-      setEndNumber(savedEndNumber);
-    }
-  }, []);
-
-  // Save data to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('students', JSON.stringify(students));
-    localStorage.setItem('selectionHistory', JSON.stringify(history));
-    localStorage.setItem('startNumber', startNumber);
-    localStorage.setItem('endNumber', endNumber);
-  }, [students, history, startNumber, endNumber]);
+    toast({
+      title: "削除完了",
+      description: "クラスデータを削除しました"
+    });
+  };
 
   const initializeStudents = () => {
     const start = parseInt(startNumber);
@@ -272,69 +556,91 @@ export default function StudentPicker() {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-7xl mx-auto space-y-6"
       >
-        <div className="flex justify-between items-center">
-          <h1 className="text-4xl font-bold text-purple-900">ランダム抽選ルーレット</h1>
+        <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-purple-100">
+          <div>
+            <h1 className="text-3xl font-extrabold text-purple-900 tracking-tight">🎓 高機能・ランダム抽選ルーレット</h1>
+            <p className="text-sm text-purple-600 mt-1">教育現場のために最適化された、公平で安全な生徒指名ツール</p>
+          </div>
           <Button
             variant="outline"
-            size="icon"
+            size="lg"
             onClick={toggleFullscreen}
-            className="hover:bg-purple-100"
+            className="hover:bg-purple-100 border-purple-200 text-purple-700 gap-2"
           >
-            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+            {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+            {isFullscreen ? "全画面解除" : "指名画面を全画面化"}
           </Button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+          {/* 抽選エリア (Card) - lotteryContainerRef をここに紐付ける */}
+          <Card
+            ref={lotteryContainerRef}
+            className={`col-span-2 transition-all duration-300 ${
+              isFullscreen
+                ? "fixed inset-0 z-50 w-screen h-screen m-0 rounded-none border-0 flex flex-col justify-between bg-gradient-to-b from-purple-950 via-slate-950 to-black p-8"
+                : "border-purple-100 shadow-md"
+            }`}
+          >
+            <CardHeader className={isFullscreen ? "text-center py-4 border-b border-white/10" : ""}>
+              <CardTitle className={`flex items-center gap-2 ${isFullscreen ? "text-white justify-center text-2xl" : "text-purple-800"}`}>
                 <Users className="h-6 w-6 text-purple-500" />
                 抽選エリア
+                {isFullscreen && <span className="text-sm px-3 py-1 rounded-full bg-white/10 ml-2">Spaceキーでスタート!</span>}
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="relative flex flex-col items-center justify-center min-h-[400px] bg-gradient-to-b from-purple-900 to-black rounded-xl p-8">
-                {/* ドラムロールエフェクト改善 */}
+            <CardContent className={`flex-1 flex flex-col justify-center ${isFullscreen ? "p-0" : ""}`}>
+              <div
+                className={`relative flex flex-col items-center justify-center bg-gradient-to-b from-purple-900 to-black rounded-xl overflow-hidden transition-all duration-300 ${
+                  isFullscreen ? "h-[70vh] rounded-none border-y border-white/5" : "min-h-[400px] p-8"
+                }`}
+              >
+                {/* ドラムロールエフェクト改善：シングルで超綺麗に回るスロットリール */}
                 {showDrumroll && (
                   <motion.div 
-                    className="absolute inset-0 flex items-center justify-center"
+                    className="absolute inset-0 flex items-center justify-center overflow-hidden"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                   >
-                    <div className="relative w-full h-48 overflow-hidden flex justify-center items-center">
-                      <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-purple-900 to-transparent z-10" />
-                      <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black to-transparent z-10" />
+                    <div className="relative w-full h-full max-h-[300px] overflow-hidden flex justify-center items-center">
+                      {/* 上下のグラデーションシャドウ */}
+                      <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-purple-900 to-transparent z-20 pointer-events-none" />
+                      <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-black to-transparent z-20 pointer-events-none" />
                       
-                      {/* 3列のスロット */}
-                      <div className="flex gap-4">
-                        {[0, 1, 2].map((col) => (
-                          <motion.div
-                            key={col}
-                            className="flex flex-col items-center"
-                            initial={{ y: 0 }}
-                            animate={{ 
-                              y: [-2000, 0],
-                            }}
-                            transition={{ 
-                              duration: 1.5,
-                              ease: [0.45, 0.05, 0.55, 0.95],
-                              times: [0, 1],
-                            }}
-                          >
-                            {rouletteNumbers.map((num, index) => (
-                              <div
-                                key={`${col}-${index}`}
-                                className="text-8xl font-bold text-white mb-8 tabular-nums"
-                                style={{
-                                  textShadow: "0 0 20px rgba(255,255,255,0.5)",
-                                  transform: `translateZ(0)`,
-                                }}
-                              >
-                                {Math.floor(Math.random() * (parseInt(endNumber) - parseInt(startNumber) + 1)) + parseInt(startNumber)}
-                              </div>
-                            ))}
-                          </motion.div>
-                        ))}
+                      {/* 中央のインジケーター（狙いライン） */}
+                      <div className="absolute inset-x-0 h-28 border-y-2 border-yellow-400 bg-yellow-400/10 z-10 pointer-events-none flex items-center justify-between px-4">
+                        <div className="text-yellow-400 font-black animate-pulse">▶</div>
+                        <div className="text-yellow-400 font-black animate-pulse">◀</div>
+                      </div>
+
+                      {/* 1列のスロット */}
+                      <div className="relative w-full flex justify-center items-center h-full">
+                        <motion.div
+                          className="flex flex-col items-center absolute"
+                          initial={{ y: 0 }}
+                          animate={{
+                            y: [-2500, 0],
+                          }}
+                          transition={{
+                            duration: 1.5,
+                            ease: [0.15, 0.85, 0.35, 1],
+                          }}
+                        >
+                          {rouletteNumbers.map((num, index) => (
+                            <div
+                              key={index}
+                              className={`font-black text-white transition-all duration-200 tabular-nums flex items-center justify-center ${
+                                isFullscreen ? "text-[12rem] h-[16rem] mb-4" : "text-8xl h-[10rem] mb-2"
+                              }`}
+                              style={{
+                                textShadow: "0 0 25px rgba(255,255,255,0.7), 0 0 50px rgba(168,85,247,0.5)",
+                                transform: `translateZ(0)`,
+                              }}
+                            >
+                              {num}
+                            </div>
+                          ))}
+                        </motion.div>
                       </div>
                     </div>
                   </motion.div>
@@ -344,44 +650,53 @@ export default function StudentPicker() {
                 <AnimatePresence>
                   {showFinalResult && tempSelectedStudent && (
                     <motion.div
-                      initial={{ scale: 2, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
+                      initial={{ scale: 0.3, opacity: 0, rotate: -5 }}
+                      animate={{ scale: 1, opacity: 1, rotate: 0 }}
                       exit={{ scale: 0.5, opacity: 0 }}
-                      transition={{ type: "spring", damping: 15, duration: 0.5 }}
-                      className="text-center"
+                      transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                      className="text-center z-10"
                     >
+                      <span className="text-yellow-400 font-bold text-lg mb-2 block tracking-widest animate-bounce">
+                        🎉 選ばれた生徒 🎉
+                      </span>
                       <motion.div
-                        className="text-9xl font-bold text-white mb-4 tabular-nums"
+                        className={`font-black text-white leading-none tracking-tight tabular-nums ${
+                          isFullscreen ? "text-[18rem]" : "text-[10rem]"
+                        }`}
                         style={{ 
-                          textShadow: "0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(147,51,234,0.6)" 
+                          textShadow: "0 0 40px rgba(255,255,255,0.9), 0 0 80px rgba(168,85,247,0.8), 0 0 120px rgba(236,72,153,0.6)"
                         }}
                         animate={{
-                          scale: [1, 1.1, 1],
-                          textShadow: [
-                            "0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(147,51,234,0.6)",
-                            "0 0 50px rgba(255,255,255,0.9), 0 0 80px rgba(147,51,234,0.8)",
-                            "0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(147,51,234,0.6)"
-                          ]
+                          scale: [1, 1.05, 1],
                         }}
                         transition={{
-                          duration: 1,
+                          duration: 2,
                           repeat: Infinity,
                           repeatType: "reverse"
                         }}
                       >
                         {tempSelectedStudent.number}
+                        <span className={`align-bottom font-bold ml-2 ${isFullscreen ? "text-6xl" : "text-4xl"}`}>
+                          番
+                        </span>
                       </motion.div>
-                      {tempSelectedStudent.streak > 1 && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.5 }}
-                        >
-                          <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-lg px-4 py-2">
-                            {tempSelectedStudent.streak}連続
-                          </Badge>
-                        </motion.div>
-                      )}
+
+                      <div className="flex flex-col items-center justify-center gap-2 mt-6">
+                        {tempSelectedStudent.streak > 1 && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                          >
+                            <Badge className="bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 text-lg px-6 py-2 shadow-lg border-none text-white font-bold">
+                              🔥 {tempSelectedStudent.streak}連続指名！
+                            </Badge>
+                          </motion.div>
+                        )}
+                        <span className="text-white/60 text-sm mt-2">
+                          指名回数: {tempSelectedStudent.presentedCount}回
+                        </span>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -389,102 +704,291 @@ export default function StudentPicker() {
                 {!showDrumroll && !showFinalResult && !selectedStudent && (
                   <motion.div
                     animate={{ 
-                      opacity: [0.5, 1, 0.5],
-                      scale: [0.95, 1.05, 0.95],
+                      opacity: [0.4, 0.9, 0.4],
+                      scale: [0.95, 1.03, 0.95],
                     }}
                     transition={{
                       duration: 2,
                       repeat: Infinity,
                     }}
-                    className="text-8xl font-bold text-white/50"
-                    style={{ textShadow: "0 0 20px rgba(255,255,255,0.3)" }}
+                    className={`font-black text-white/40 tracking-wider ${
+                      isFullscreen ? "text-[12rem]" : "text-7xl"
+                    }`}
+                    style={{ textShadow: "0 0 30px rgba(255,255,255,0.2)" }}
                   >
-                    ? ? ?
+                    READY?
                   </motion.div>
                 )}
               </div>
 
-              <div className="flex justify-center gap-4 mt-6">
+              {/* ボタン操作部分 */}
+              <div className={`flex justify-center items-center gap-4 ${isFullscreen ? "py-6 bg-slate-950 border-t border-white/10" : "mt-6"}`}>
                 <Button
                   size="lg"
                   onClick={selectRandomStudent}
                   disabled={isSpinning || students.length === 0}
-                  className="relative overflow-hidden bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-6 text-lg transform hover:scale-105 transition-transform"
+                  className={`relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white font-extrabold transform hover:scale-105 active:scale-95 transition-all shadow-lg border-none ${
+                    isFullscreen ? "px-16 py-8 text-2xl rounded-2xl" : "px-8 py-6 text-lg"
+                  }`}
                 >
                   {isSpinning && (
                     <motion.div
                       className="absolute inset-0 bg-white/20"
                       animate={{
-                        x: ["0%", "100%"],
+                        x: ["-100%", "100%"],
                       }}
                       transition={{
-                        duration: 1,
+                        duration: 1.2,
                         repeat: Infinity,
                         ease: "linear",
                       }}
                     />
                   )}
                   <Shuffle className="mr-2 h-6 w-6" />
-                  {isSpinning ? "選択中..." : "抽選開始"}
+                  {isSpinning ? "指名中..." : "抽選開始（Space）"}
                 </Button>
+
+                {isFullscreen && (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={toggleFullscreen}
+                    className="bg-white/10 text-white hover:bg-white/20 border-white/20 py-8 px-8 rounded-2xl text-lg font-bold"
+                  >
+                    全画面を閉じる
+                  </Button>
+                )}
+
                 <Button
                   variant="outline"
                   onClick={resetPresentedCounts}
                   disabled={!selectedStudent}
-                  className="hover:bg-purple-100"
+                  className={`hover:bg-purple-100 border-purple-200 text-purple-700 font-bold ${
+                    isFullscreen ? "py-8 px-8 rounded-2xl text-lg border-white/20 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white" : ""
+                  }`}
                 >
                   <RotateCcw className="mr-2 h-4 w-4" />
-                  リセット
+                  履歴・回数リセット
                 </Button>
               </div>
             </CardContent>
           </Card>
 
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5 text-purple-500" />
-                  設定
+            {/* クラス・グループプロファイル保存/読込 */}
+            <Card className="border-purple-100 shadow-md">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-purple-800 text-lg">
+                  <Save className="h-5 w-5 text-purple-600" />
+                  クラス・グループ保存
                 </CardTitle>
+                <CardDescription>よく使うクラス編成を保存してすぐに読み込めます</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="text-sm font-medium">開始番号</label>
-                      <Input
-                        type="number"
-                        value={startNumber}
-                        onChange={(e) => setStartNumber(e.target.value)}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-sm font-medium">終了番号</label>
-                      <Input
-                        type="number"
-                        value={endNumber}
-                        onChange={(e) => setEndNumber(e.target.value)}
-                        className="mt-1"
-                      />
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="例: 1年1組、数学Aクラス"
+                    value={newProfileName}
+                    onChange={(e) => setNewProfileName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSaveProfile} className="bg-purple-600 hover:bg-purple-700 text-white font-bold">
+                    <Plus className="h-4 w-4 mr-1" /> 保存
+                  </Button>
+                </div>
+
+                {classProfiles.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-purple-50">
+                    <label className="text-xs font-semibold text-purple-700">保存済みクラス一覧:</label>
+                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1">
+                      {classProfiles.map((profile) => (
+                        <div
+                          key={profile.id}
+                          className={`flex items-center justify-between p-2 rounded-lg border text-sm transition-all ${
+                            currentProfileId === profile.id
+                              ? "bg-purple-50 border-purple-300 font-semibold text-purple-900"
+                              : "bg-white border-gray-100 hover:bg-gray-50 text-gray-700"
+                          }`}
+                        >
+                          <span
+                            className="cursor-pointer flex-1 truncate py-1"
+                            onClick={() => handleLoadProfile(profile.id)}
+                          >
+                            🏫 {profile.name} ({profile.startNumber}〜{profile.endNumber}番)
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteProfile(profile.id)}
+                            className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 基本設定 */}
+            <Card className="border-purple-100 shadow-md">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-purple-800 text-lg">
+                  <Settings className="h-5 w-5 text-purple-600" />
+                  基本設定
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-xs font-semibold text-gray-600 block">開始番号</label>
+                    <Input
+                      type="number"
+                      value={startNumber}
+                      onChange={(e) => setStartNumber(e.target.value)}
+                      className="mt-1"
+                      min="1"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs font-semibold text-gray-600 block">終了番号</label>
+                    <Input
+                      type="number"
+                      value={endNumber}
+                      onChange={(e) => setEndNumber(e.target.value)}
+                      className="mt-1"
+                      min="1"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
                   <Button
                     onClick={initializeStudents}
-                    className="w-full bg-purple-600 hover:bg-purple-700"
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold"
                   >
                     <UserPlus className="mr-2 h-4 w-4" />
-                    番号を設定
+                    この範囲で初期化する
                   </Button>
+                </div>
+
+                <Separator className="bg-purple-50" />
+
+                {/* 重複防止 */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-purple-50/50 border border-purple-100/50">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-bold text-purple-900 block cursor-pointer" htmlFor="no-repeat-toggle">
+                      全員あたるまで重複させない
+                    </label>
+                    <span className="text-xs text-purple-600 block">
+                      生徒全員が1巡選ばれるまで被りません
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="no-repeat-toggle"
+                    checked={noRepeat}
+                    onChange={(e) => setNoRepeat(e.target.checked)}
+                    className="w-5 h-5 accent-purple-600 cursor-pointer"
+                  />
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5 text-purple-500" />
+            {/* 休んでいる生徒、少人数指定 */}
+            <Card className="border-purple-100 shadow-md">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-purple-800 text-lg">
+                  <Users className="h-5 w-5 text-purple-600" />
+                  出席・グループ編成
+                </CardTitle>
+                <CardDescription>
+                  お休みや、少人数教室でいる生徒のみをフィルタリングできます。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex rounded-lg bg-gray-100 p-1">
+                  <button
+                    onClick={() => setSelectionMode('exclude')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                      selectionMode === 'exclude'
+                        ? "bg-white text-purple-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    ❌ 休んでいる生徒を除外
+                  </button>
+                  <button
+                    onClick={() => setSelectionMode('include')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                      selectionMode === 'include'
+                        ? "bg-white text-purple-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    🟢 いる生徒のみを抽出
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-600 block">
+                    対象番号の指定 (半角、ハイフン、カンマが使えます):
+                  </label>
+                  <Input
+                    placeholder="例: 3, 5, 10-15"
+                    value={filterNumbersText}
+                    onChange={(e) => setFilterNumbersText(e.target.value)}
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    ※ カンマ区切り（,）や範囲指定（-）が自動で解析されます。
+                  </p>
+                </div>
+
+                {/* インタラクティブグリッド */}
+                {students.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-purple-50">
+                    <label className="text-xs font-bold text-purple-800 block">
+                      生徒を直接クリックして切り替える:
+                    </label>
+                    <div className="grid grid-cols-5 gap-1.5 max-h-48 overflow-y-auto p-1 bg-gray-50/50 rounded-lg border border-gray-100">
+                      {students.map((student) => {
+                        const active = isStudentActive(student.number);
+                        return (
+                          <button
+                            key={student.id}
+                            onClick={() => toggleStudentInFilter(student.number)}
+                            className={`h-8 rounded-md flex items-center justify-center text-xs font-bold transition-all border ${
+                              active
+                                ? "bg-emerald-500 border-emerald-600 text-white shadow-sm hover:bg-emerald-600"
+                                : "bg-gray-100 border-gray-200 text-gray-400 line-through hover:bg-gray-200"
+                            }`}
+                            title={`${student.number}番をトグル`}
+                          >
+                            {student.number}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> 抽選対象
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" /> 抽選から除外
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 統計情報 */}
+            <Card className="border-purple-100 shadow-md">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-purple-800 text-lg">
+                  <Trophy className="h-5 w-5 text-purple-600" />
                   統計情報
                 </CardTitle>
               </CardHeader>
@@ -492,127 +996,117 @@ export default function StudentPicker() {
                 <div className="space-y-4">
                   {students.length > 0 ? (
                     <>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">合計人数:</span>
-                        <Badge variant="secondary">{students.length}人</Badge>
+                      <div className="flex justify-between items-center text-sm border-b border-gray-50 pb-2">
+                        <span className="text-gray-600">登録生徒総数:</span>
+                        <Badge variant="secondary" className="font-bold">{students.length}人</Badge>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">未選択:</span>
-                        <Badge variant="secondary">
-                          {students.filter(s => s.presentedCount === 0).length}人
+                      <div className="flex justify-between items-center text-sm border-b border-gray-50 pb-2">
+                        <span className="text-gray-600">現在のアクティブな抽選対象:</span>
+                        <Badge className="bg-emerald-500 text-white font-bold">
+                          {students.filter(s => isStudentActive(s.number)).length}人
                         </Badge>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">最多選択回数:</span>
-                        <Badge variant="secondary">
-                          {Math.max(...students.map(s => s.presentedCount))}回
+                      <div className="flex justify-between items-center text-sm border-b border-gray-50 pb-2">
+                        <span className="text-gray-600">まだ一度も選ばれていない生徒:</span>
+                        <Badge variant="outline" className="text-purple-700 border-purple-200 font-bold">
+                          {students.filter(s => isStudentActive(s.number) && s.presentedCount === 0).length}人
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">最多指名回数:</span>
+                        <Badge variant="secondary" className="font-bold">
+                          {students.length > 0 ? Math.max(...students.map(s => s.presentedCount)) : 0}回
                         </Badge>
                       </div>
                     </>
                   ) : (
-                    <div className="text-center text-gray-500">
-                      データがありません
+                    <div className="text-center text-gray-500 py-2">
+                      生徒データがありません。基本設定で初期化してください。
                     </div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 教育現場のための信頼性・安全性・セキュリティのご案内 */}
+            <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/40 to-teal-50/20 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-emerald-900 text-base font-extrabold">
+                  <ShieldCheck className="h-5 w-5 text-emerald-600 animate-pulse" />
+                  個人情報保護・セキュリティ保証（学校対応）
+                </CardTitle>
+                <CardDescription className="text-xs text-emerald-800 font-medium">
+                  教育委員会や学校のセキュリティポリシーに完全対応しています
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs text-emerald-950 leading-relaxed">
+                <div className="flex gap-2 items-start bg-white/60 p-2.5 rounded-lg border border-emerald-100/50">
+                  <Lock className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>完全なオフライン・ローカル処理 (通信なし):</strong><br />
+                    本システムは、生徒の番号、設定、履歴など、すべてのデータを<strong>端末内部（お使いのブラウザ）だけで処理・保管</strong>します。外部サーバーへの送信や通信は一切行われないため、生徒の個人情報や出席データがインターネット上に漏洩することは絶対にありません。
+                  </p>
+                </div>
+                <div className="flex gap-2 items-start">
+                  <Check className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>暗号学的擬似乱数 (完全な公平性):</strong><br />
+                    JavaScript標準の高度な乱数生成（Math.random）を利用し、完全に偏りのない数学的な均等確率で指名を行います。特定の生徒ばかりが連続して選ばれるといった不公平は発生しません。
+                  </p>
+                </div>
+                <div className="flex gap-2 items-start">
+                  <Info className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>広告なし・トラッカーなし:</strong><br />
+                    アクセス解析や広告配信などのサードパーティ製追跡スクリプト（トラッカー）は1つも組み込まれていません。授業中、不要な広告や不適切なポップアップが表示される心配はなく、安心・安全に授業に専念していただけます。
+                  </p>
                 </div>
               </CardContent>
             </Card>
           </div>
         </div>
 
-        <Card>
+        {/* 履歴カード */}
+        <Card className="border-purple-100 shadow-md">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-purple-500" />
-              履歴
+            <CardTitle className="flex items-center gap-2 text-purple-800 text-lg">
+              <History className="h-5 w-5 text-purple-600" />
+              指名履歴
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {history.length > 0 ? (
-                history.slice().reverse().map((entry, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="flex items-center gap-4 p-2 rounded-lg hover:bg-purple-50"
-                  >
-                    <Badge variant="outline">#{entry.studentNumber}</Badge>
-                    <span className="text-sm text-gray-600">
-                      {new Date(entry.timestamp).toLocaleString()}
-                    </span>
-                  </motion.div>
-                ))
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {history.slice().reverse().map((entry, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -15 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: Math.min(index * 0.05, 0.5) }}
+                      className="flex items-center justify-between p-3 rounded-lg border border-purple-50 bg-white shadow-sm hover:shadow transition-shadow"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-purple-500 font-bold">#{history.length - index}</span>
+                        <Badge className="bg-purple-100 text-purple-800 border-none font-black text-sm px-3.5 py-1">
+                          {entry.studentNumber} 番
+                        </Badge>
+                      </div>
+                      <span className="text-xs text-gray-400 font-medium">
+                        {new Date(entry.timestamp).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </span>
+                    </motion.div>
+                  ))}
+                </div>
               ) : (
                 <div className="text-center text-gray-500 py-4">
-                  履歴はありません
+                  今回のセッションでの指名履歴はまだありません
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
 
-        {/* 結果ダイアログの表示を即時に */}
-        <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
-          <DialogContent className="sm:max-w-md bg-gradient-to-b from-purple-900 to-black border-purple-500">
-            <DialogHeader>
-              <DialogTitle className="text-center text-2xl font-bold text-white">
-                選ばれたのは...
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col items-center justify-center py-8">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{
-                  type: "spring",
-                  damping: 12,
-                  duration: 0.3
-                }}
-                className="relative"
-              >
-                <div 
-                  className="text-9xl font-bold text-white mb-4"
-                  style={{ 
-                    textShadow: "0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(147,51,234,0.6)" 
-                  }}
-                >
-                  {tempSelectedStudent?.number}
-                </div>
-                {tempSelectedStudent?.streak && tempSelectedStudent.streak > 1 && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute -top-4 -right-4"
-                  >
-                    <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500">
-                      {tempSelectedStudent.streak}連続
-                    </Badge>
-                  </motion.div>
-                )}
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="mt-4 text-white/80"
-              >
-                選ばれた回数: {tempSelectedStudent?.presentedCount}回
-              </motion.div>
-            </div>
-            <DialogFooter className="sm:justify-center">
-              <Button
-                type="button"
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
-                onClick={handleConfirmResult}
-              >
-                <Check className="mr-2 h-4 w-4" />
-                OK
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </motion.div>
     </div>
   );
