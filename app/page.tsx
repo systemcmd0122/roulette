@@ -188,56 +188,69 @@ export default function StudentPicker() {
 
   // Load data from localStorage on mount
   useEffect(() => {
-    const savedStudents = localStorage.getItem('students');
-    const savedHistory = localStorage.getItem('selectionHistory');
-    const savedStartNumber = localStorage.getItem('startNumber');
-    const savedEndNumber = localStorage.getItem('endNumber');
-    const savedSelectionMode = localStorage.getItem('selectionMode');
-    const savedFilterNumbersText = localStorage.getItem('filterNumbersText');
-    const savedNoRepeat = localStorage.getItem('noRepeat');
-    const savedClassProfiles = localStorage.getItem('classProfiles');
-    const savedCurrentProfileId = localStorage.getItem('currentProfileId');
+    try {
+      const savedStudents = localStorage.getItem('students');
+      const savedHistory = localStorage.getItem('selectionHistory');
+      const savedStartNumber = localStorage.getItem('startNumber');
+      const savedEndNumber = localStorage.getItem('endNumber');
+      const savedSelectionMode = localStorage.getItem('selectionMode');
+      const savedFilterNumbersText = localStorage.getItem('filterNumbersText');
+      const savedNoRepeat = localStorage.getItem('noRepeat');
+      const savedClassProfiles = localStorage.getItem('classProfiles');
+      const savedCurrentProfileId = localStorage.getItem('currentProfileId');
 
-    if (savedStudents) {
-      setStudents(JSON.parse(savedStudents));
-    }
-    if (savedHistory) {
-      setHistory(JSON.parse(savedHistory));
-    }
-    if (savedStartNumber) {
-      setStartNumber(savedStartNumber);
-    }
-    if (savedEndNumber) {
-      setEndNumber(savedEndNumber);
-    }
-    if (savedSelectionMode) {
-      setSelectionMode(savedSelectionMode as 'exclude' | 'include');
-    }
-    if (savedFilterNumbersText !== null) {
-      setFilterNumbersText(savedFilterNumbersText);
-    }
-    if (savedNoRepeat !== null) {
-      setNoRepeat(savedNoRepeat === 'true');
-    }
-    if (savedClassProfiles) {
-      setClassProfiles(JSON.parse(savedClassProfiles));
-    }
-    if (savedCurrentProfileId) {
-      setCurrentProfileId(savedCurrentProfileId);
+      if (savedStudents) {
+        setStudents(JSON.parse(savedStudents));
+      }
+      if (savedHistory) {
+        setHistory(JSON.parse(savedHistory));
+      }
+      if (savedStartNumber) {
+        setStartNumber(savedStartNumber);
+      }
+      if (savedEndNumber) {
+        setEndNumber(savedEndNumber);
+      }
+      if (savedSelectionMode) {
+        setSelectionMode(savedSelectionMode as 'exclude' | 'include');
+      }
+      if (savedFilterNumbersText !== null) {
+        setFilterNumbersText(savedFilterNumbersText);
+      }
+      if (savedNoRepeat !== null) {
+        setNoRepeat(savedNoRepeat === 'true');
+      }
+      if (savedClassProfiles) {
+        setClassProfiles(JSON.parse(savedClassProfiles));
+      }
+      if (savedCurrentProfileId) {
+        setCurrentProfileId(savedCurrentProfileId);
+      }
+    } catch (err) {
+      console.error('Failed to load saved data from localStorage:', err);
+      toast({
+        title: "読込エラー",
+        description: "保存されたデータの読み込みに失敗しました。データが破損している可能性があります。",
+        variant: "destructive"
+      });
     }
   }, []);
 
   // Save data to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('students', JSON.stringify(students));
-    localStorage.setItem('selectionHistory', JSON.stringify(history));
-    localStorage.setItem('startNumber', startNumber);
-    localStorage.setItem('endNumber', endNumber);
-    localStorage.setItem('selectionMode', selectionMode);
-    localStorage.setItem('filterNumbersText', filterNumbersText);
-    localStorage.setItem('noRepeat', String(noRepeat));
-    localStorage.setItem('classProfiles', JSON.stringify(classProfiles));
-    localStorage.setItem('currentProfileId', currentProfileId);
+    try {
+      localStorage.setItem('students', JSON.stringify(students));
+      localStorage.setItem('selectionHistory', JSON.stringify(history));
+      localStorage.setItem('startNumber', startNumber);
+      localStorage.setItem('endNumber', endNumber);
+      localStorage.setItem('selectionMode', selectionMode);
+      localStorage.setItem('filterNumbersText', filterNumbersText);
+      localStorage.setItem('noRepeat', String(noRepeat));
+      localStorage.setItem('classProfiles', JSON.stringify(classProfiles));
+      localStorage.setItem('currentProfileId', currentProfileId);
+    } catch (err) {
+      console.error('Failed to save data to localStorage:', err);
+    }
   }, [students, history, startNumber, endNumber, selectionMode, filterNumbersText, noRepeat, classProfiles, currentProfileId]);
 
   // ヘルパー: グリッドから特定の生徒を切り替える
@@ -408,7 +421,7 @@ export default function StudentPicker() {
     const profileId = `profile-${Date.now()}`;
     const newProfile: ClassProfile = {
       id: profileId,
-      name: newProfileName,
+      name: newProfileName.trim(),
       startNumber,
       endNumber,
       selectionMode,
@@ -486,6 +499,22 @@ export default function StudentPicker() {
       toast({
         title: "エラー",
         description: "正しい番号範囲を入力してください",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (start < 1) {
+      toast({
+        title: "エラー",
+        description: "開始番号は1以上にしてください",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (end - start + 1 > 1000) {
+      toast({
+        title: "エラー",
+        description: "一度に登録できるのは1000人までです。範囲を見直してください",
         variant: "destructive"
       });
       return;
@@ -808,6 +837,12 @@ export default function StudentPicker() {
                     placeholder="例: 1年1組、数学Aクラス"
                     value={newProfileName}
                     onChange={(e) => setNewProfileName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveProfile();
+                      }
+                    }}
                     className="flex-1"
                   />
                   <Button onClick={handleSaveProfile} className="bg-purple-600 hover:bg-purple-700 text-white font-bold">
