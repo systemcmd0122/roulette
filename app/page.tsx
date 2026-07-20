@@ -3,31 +3,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { 
   Users, 
   UserPlus, 
   Shuffle, 
-  Trash2, 
   RotateCcw, 
   History,
-  Star,
-  Hash,
   Trophy,
   Settings,
-  Crown,
-  Heart,
   Maximize,
   Minimize,
   Check,
@@ -36,10 +23,8 @@ import {
   Save,
   Plus,
   X,
-  Info,
-  Calendar
+  Info
 } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from "@/hooks/use-toast";
 import confetti from 'canvas-confetti';
 
@@ -106,13 +91,9 @@ export default function StudentPicker() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [history, setHistory] = useState<SelectionHistory[]>([]);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [startNumber, setStartNumber] = useState('1');
   const [endNumber, setEndNumber] = useState('40');
-  const [showSetup, setShowSetup] = useState(false);
-  const [showStats, setShowStats] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showResultDialog, setShowResultDialog] = useState(false);
   const [tempSelectedStudent, setTempSelectedStudent] = useState<Student | null>(null);
   const [rouletteNumbers, setRouletteNumbers] = useState<number[]>([]);
   const [showDrumroll, setShowDrumroll] = useState(false);
@@ -396,9 +377,9 @@ export default function StudentPicker() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
-        // 入力フィールド等にフォーカスがある場合は動作をスキップ
+        // 入力フィールドやボタンにフォーカスがある場合は、そちら側の標準動作を優先する
         const activeTag = document.activeElement?.tagName.toLowerCase();
-        if (activeTag === 'input' || activeTag === 'textarea') {
+        if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'button') {
           return;
         }
         e.preventDefault();
@@ -510,7 +491,6 @@ export default function StudentPicker() {
     }
     setStudents(newStudents);
     setHistory([]);
-    setShowSetup(false);
     toast({
       title: "初期化完了",
       description: `${start}番から${end}番までの学生を登録しました`,
@@ -552,16 +532,16 @@ export default function StudentPicker() {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-7xl mx-auto space-y-6"
       >
-        <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-purple-100">
+        <div className="flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center bg-white p-4 rounded-xl shadow-sm border border-purple-100">
           <div>
-            <h1 className="text-3xl font-extrabold text-purple-900 tracking-tight">🎓 高機能・ランダム抽選ルーレット</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-purple-900 tracking-tight">🎓 高機能・ランダム抽選ルーレット</h1>
             <p className="text-sm text-purple-600 mt-1">教育現場のために最適化された、公平で安全な生徒指名ツール</p>
           </div>
           <Button
             variant="outline"
             size="lg"
             onClick={toggleFullscreen}
-            className="hover:bg-purple-100 border-purple-200 text-purple-700 gap-2"
+            className="hover:bg-purple-100 border-purple-200 text-purple-700 gap-2 w-full sm:w-auto"
           >
             {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
             {isFullscreen ? "全画面解除" : "指名画面を全画面化"}
@@ -584,18 +564,29 @@ export default function StudentPicker() {
                 ref={lotteryContainerRef}
                 className={`transition-all duration-300 ${
                   isFullscreen
-                    ? "fixed inset-0 z-50 w-screen h-screen flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-purple-950 via-slate-950 to-black p-6"
+                    ? "fixed inset-0 z-50 w-screen h-screen min-h-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-b from-purple-950 via-slate-950 to-black p-4 sm:p-6"
                     : ""
                 }`}
               >
                 {isFullscreen && (
-                  <span className="text-white/70 text-sm px-3 py-1 rounded-full bg-white/10 shrink-0">
-                    Spaceキーでスタート！
-                  </span>
+                  <>
+                    {/* 常時表示される全画面終了ボタン（右上・どんな画面幅でも必ず押せる） */}
+                    <button
+                      onClick={toggleFullscreen}
+                      aria-label="全画面表示を終了"
+                      title="全画面表示を終了 (Esc)"
+                      className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                    <span className="text-white/70 text-xs sm:text-sm px-3 py-1 rounded-full bg-white/10 shrink-0">
+                      Spaceキーでスタート！
+                    </span>
+                  </>
                 )}
               <div
                 className={`relative flex flex-col items-center justify-center bg-gradient-to-b from-purple-900 to-black rounded-xl overflow-hidden transition-all duration-300 ${
-                  isFullscreen ? "w-full flex-1 rounded-2xl border border-white/5" : "min-h-[400px] p-8"
+                  isFullscreen ? "w-full flex-1 min-h-0 rounded-2xl border border-white/5" : "min-h-[400px] p-8"
                 }`}
               >
                 {/* ドラムロール：中央インジケーターの位置に本当の結果がぴったり止まる1列リール */}
@@ -632,7 +623,9 @@ export default function StudentPicker() {
                             <div
                               key={index}
                               className={`font-black text-white tabular-nums flex items-center justify-center ${
-                                isFullscreen ? "text-[12rem] h-[16rem] mb-4" : "text-8xl h-[10rem] mb-2"
+                                isFullscreen
+                                  ? "text-[clamp(4rem,16vw,12rem)] h-[clamp(5rem,18vw,16rem)] mb-4"
+                                  : "text-[clamp(3.5rem,10vw,6rem)] h-[clamp(4.5rem,12vw,10rem)] mb-2"
                               }`}
                               style={{
                                 textShadow: "0 0 25px rgba(255,255,255,0.7), 0 0 50px rgba(168,85,247,0.5)",
@@ -668,7 +661,7 @@ export default function StudentPicker() {
                       </motion.span>
                       <motion.div
                         className={`font-black text-white leading-none tracking-tight tabular-nums ${
-                          isFullscreen ? "text-[18rem]" : "text-[10rem]"
+                          isFullscreen ? "text-[clamp(5rem,20vw,18rem)]" : "text-[clamp(4rem,14vw,10rem)]"
                         }`}
                         style={{ 
                           textShadow: "0 0 40px rgba(255,255,255,0.9), 0 0 80px rgba(168,85,247,0.8), 0 0 120px rgba(236,72,153,0.6)"
@@ -684,7 +677,7 @@ export default function StudentPicker() {
                         }}
                       >
                         {tempSelectedStudent.number}
-                        <span className={`align-bottom font-bold ml-2 ${isFullscreen ? "text-6xl" : "text-4xl"}`}>
+                        <span className={`align-bottom font-bold ml-2 ${isFullscreen ? "text-[clamp(2rem,6vw,4rem)]" : "text-4xl"}`}>
                           番
                         </span>
                       </motion.div>
@@ -721,7 +714,7 @@ export default function StudentPicker() {
                       ease: "easeInOut"
                     }}
                     className={`font-black text-white/40 tracking-wider ${
-                      isFullscreen ? "text-[12rem]" : "text-7xl"
+                      isFullscreen ? "text-[clamp(4rem,14vw,12rem)]" : "text-[clamp(3rem,8vw,4.5rem)]"
                     }`}
                     style={{ textShadow: "0 0 30px rgba(255,255,255,0.2)" }}
                   >
@@ -731,13 +724,13 @@ export default function StudentPicker() {
               </div>
 
               {/* ボタン操作部分 */}
-              <div className={`flex justify-center items-center gap-4 flex-wrap shrink-0 ${isFullscreen ? "pt-2" : "mt-6"}`}>
+              <div className={`flex justify-center items-center gap-3 sm:gap-4 flex-wrap shrink-0 ${isFullscreen ? "pt-1" : "mt-6"}`}>
                 <Button
                   size="lg"
                   onClick={selectRandomStudent}
                   disabled={isSpinning || students.length === 0}
                   className={`relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white font-extrabold transform hover:scale-105 active:scale-95 transition-all shadow-lg border-none ${
-                    isFullscreen ? "px-16 py-8 text-2xl rounded-2xl" : "px-8 py-6 text-lg"
+                    isFullscreen ? "px-8 py-5 text-lg sm:px-12 sm:py-6 sm:text-xl lg:px-16 lg:py-8 lg:text-2xl rounded-2xl" : "px-8 py-6 text-lg"
                   }`}
                 >
                   {isSpinning && (
@@ -757,23 +750,12 @@ export default function StudentPicker() {
                   {isSpinning ? "指名中..." : "抽選開始（Space）"}
                 </Button>
 
-                {isFullscreen && (
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={toggleFullscreen}
-                    className="bg-white/10 text-white hover:bg-white/20 border-white/20 py-8 px-8 rounded-2xl text-lg font-bold"
-                  >
-                    全画面を閉じる
-                  </Button>
-                )}
-
                 <Button
                   variant="outline"
                   onClick={resetPresentedCounts}
                   disabled={!selectedStudent}
                   className={`hover:bg-purple-100 border-purple-200 text-purple-700 font-bold ${
-                    isFullscreen ? "py-8 px-8 rounded-2xl text-lg border-white/20 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white" : ""
+                    isFullscreen ? "py-5 px-6 text-base sm:py-6 sm:px-8 sm:text-lg rounded-2xl border-white/20 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white" : ""
                   }`}
                 >
                   <RotateCcw className="mr-2 h-4 w-4" />
@@ -922,7 +904,8 @@ export default function StudentPicker() {
                 <div className="flex rounded-lg bg-gray-100 p-1">
                   <button
                     onClick={() => setSelectionMode('exclude')}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                    aria-pressed={selectionMode === 'exclude'}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 ${
                       selectionMode === 'exclude'
                         ? "bg-white text-purple-900 shadow-sm"
                         : "text-gray-500 hover:text-gray-900"
@@ -932,7 +915,8 @@ export default function StudentPicker() {
                   </button>
                   <button
                     onClick={() => setSelectionMode('include')}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                    aria-pressed={selectionMode === 'include'}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 ${
                       selectionMode === 'include'
                         ? "bg-white text-purple-900 shadow-sm"
                         : "text-gray-500 hover:text-gray-900"
@@ -969,7 +953,8 @@ export default function StudentPicker() {
                           <button
                             key={student.id}
                             onClick={() => toggleStudentInFilter(student.number)}
-                            className={`h-8 rounded-md flex items-center justify-center text-xs font-bold transition-all border ${
+                            aria-pressed={active}
+                            className={`h-8 rounded-md flex items-center justify-center text-xs font-bold transition-all border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 ${
                               active
                                 ? "bg-emerald-500 border-emerald-600 text-white shadow-sm hover:bg-emerald-600"
                                 : "bg-gray-100 border-gray-200 text-gray-400 line-through hover:bg-gray-200"
@@ -1016,18 +1001,57 @@ export default function StudentPicker() {
                           {students.filter(s => isStudentActive(s.number)).length}人
                         </Badge>
                       </div>
-                      <div className="flex justify-between items-center text-sm border-b border-gray-50 pb-2">
-                        <span className="text-gray-600">まだ一度も選ばれていない生徒:</span>
-                        <Badge variant="outline" className="text-purple-700 border-purple-200 font-bold">
-                          {students.filter(s => isStudentActive(s.number) && s.presentedCount === 0).length}人
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-600">最多指名回数:</span>
-                        <Badge variant="secondary" className="font-bold">
-                          {students.length > 0 ? Math.max(...students.map(s => s.presentedCount)) : 0}回
-                        </Badge>
-                      </div>
+                      {(() => {
+                        const activeCount = students.filter(s => isStudentActive(s.number)).length;
+                        const notYetCount = students.filter(s => isStudentActive(s.number) && s.presentedCount === 0).length;
+                        const progressPct = activeCount > 0 ? Math.round(((activeCount - notYetCount) / activeCount) * 100) : 0;
+                        return (
+                          <div className="space-y-1.5 border-b border-gray-50 pb-3">
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-gray-600">まだ一度も選ばれていない生徒:</span>
+                              <Badge variant="outline" className="text-purple-700 border-purple-200 font-bold">
+                                {notYetCount}人
+                              </Badge>
+                            </div>
+                            <div className="w-full h-2 rounded-full bg-purple-100 overflow-hidden" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}>
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                                style={{ width: `${progressPct}%` }}
+                              />
+                            </div>
+                            <p className="text-[11px] text-gray-400 text-right">
+                              クラス全体の {progressPct}% が1巡しました
+                            </p>
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        const stats = getStudentStats();
+                        return (
+                          <>
+                            <div className="flex justify-between items-center text-sm border-b border-gray-50 pb-2">
+                              <span className="text-gray-600">最多指名回数:</span>
+                              <Badge variant="secondary" className="font-bold">
+                                {stats.maxPresentations}回
+                              </Badge>
+                            </div>
+                            <div className="flex justify-between items-center text-sm border-b border-gray-50 pb-2">
+                              <span className="text-gray-600">これまでの総指名数:</span>
+                              <Badge variant="secondary" className="font-bold">
+                                {stats.totalPresentations}回
+                              </Badge>
+                            </div>
+                            {stats.maxStreak > 1 && stats.streakHolder && (
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-gray-600">連続指名の記録:</span>
+                                <Badge className="bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 text-white font-bold border-none">
+                                  🔥 {stats.streakHolder.number}番 ({stats.maxStreak}連続)
+                                </Badge>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </>
                   ) : (
                     <div className="text-center text-gray-500 py-2">
