@@ -603,7 +603,13 @@ export default function StudentPicker() {
                       <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-black to-transparent z-20 pointer-events-none" />
                       
                       {/* 中央のインジケーター（狙いライン） */}
-                      <div className="absolute inset-x-0 h-28 border-y-2 border-yellow-400 bg-yellow-400/10 z-10 pointer-events-none flex items-center justify-between px-4">
+                      <div
+                        className={`absolute inset-x-0 border-y-2 border-yellow-400 bg-yellow-400/10 z-10 pointer-events-none flex items-center justify-between px-4 ${
+                          isFullscreen
+                            ? "h-[clamp(5rem,18vw,16rem)]"
+                            : "h-[clamp(4.5rem,12vw,10rem)]"
+                        }`}
+                      >
                         <div className="text-yellow-400 font-black animate-pulse">▶</div>
                         <div className="text-yellow-400 font-black animate-pulse">◀</div>
                       </div>
