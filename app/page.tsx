@@ -110,11 +110,8 @@ export default function StudentPicker() {
   const [startNumber, setStartNumber] = useState('1');
   const [endNumber, setEndNumber] = useState('40');
   const [showSetup, setShowSetup] = useState(false);
-  const [spinSpeed, setSpinSpeed] = useState(50);
   const [showStats, setShowStats] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [spinDuration, setSpinDuration] = useState(2);
-  const [showSparkles, setShowSparkles] = useState(false);
   const [showResultDialog, setShowResultDialog] = useState(false);
   const [tempSelectedStudent, setTempSelectedStudent] = useState<Student | null>(null);
   const [rouletteNumbers, setRouletteNumbers] = useState<number[]>([]);
@@ -201,16 +198,11 @@ export default function StudentPicker() {
     }, 250);
   };
 
-  // シャッフルアニメーション用の数字配列を生成
-  const generateRouletteNumbers = () => {
-    const numbers = students.map(s => s.number);
-    const shuffled = [];
-    for (let i = 0; i < 20; i++) {
-      shuffled.push(...numbers.sort(() => Math.random() - 0.5));
-    }
-    return shuffled;
-  };
-
+  // 抽選アニメーション用のリール1列の長さ（奇数にして中央インデックスを明確にする）
+  const REEL_LENGTH = 41;
+  const REEL_CENTER_INDEX = Math.floor(REEL_LENGTH / 2);
+  // リールが回転する時間（秒）。JSX側のアニメーションとsetTimeoutの両方でこの値を使う。
+  const REEL_SPIN_DURATION = 3.2;
 
 
   // Load data from localStorage on mount
@@ -351,22 +343,27 @@ export default function StudentPicker() {
     }
 
     setIsSpinning(true);
-    setShowSparkles(true);
     setShowDrumroll(true);
     setShowFinalResult(false);
-    
-    // スロット効果用の数字配列（アニメーション表示用）
-    const allNumbers = [];
-    for (let i = 0; i < 50; i++) {
-      const idx = Math.floor(Math.random() * activeCandidates.length);
-      allNumbers.push(activeCandidates[idx].number);
-    }
-    setRouletteNumbers(allNumbers);
 
-    // 最終的に選ばれる学生を決定
+    // 最終的に選ばれる学生を先に決定する
     const finalStudent = eligibleCandidates[Math.floor(Math.random() * eligibleCandidates.length)];
-    
-    // スロットアニメーション
+
+    // リール用の数字配列を生成。中央（REEL_CENTER_INDEX）には
+    // 必ず「本当に選ばれた番号」を仕込んでおくことで、
+    // アニメーションが止まった瞬間に表示される数字と結果が完全に一致するようにする。
+    const reel: number[] = [];
+    for (let i = 0; i < REEL_LENGTH; i++) {
+      if (i === REEL_CENTER_INDEX) {
+        reel.push(finalStudent.number);
+      } else {
+        const idx = Math.floor(Math.random() * activeCandidates.length);
+        reel.push(activeCandidates[idx].number);
+      }
+    }
+    setRouletteNumbers(reel);
+
+    // スロットアニメーション（下記 REEL_SPIN_DURATION と一致させる）
     setTimeout(() => {
       setShowDrumroll(false);
       setShowFinalResult(true);
@@ -389,11 +386,10 @@ export default function StudentPicker() {
       setStudents(updatedStudents);
       setHistory(prev => [...prev, { studentNumber: finalStudent.number, timestamp: new Date() }]);
       setIsSpinning(false);
-      setShowSparkles(false);
       
       // 演出（紙吹雪）をトリガー
       triggerConfetti();
-    }, 1500);
+    }, REEL_SPIN_DURATION * 1000);
   }, [students, noRepeat, toast, isStudentActive]);
 
   // キーボードイベント（Spaceキーで抽選、Escで全画面終了）の検知
@@ -573,34 +569,42 @@ export default function StudentPicker() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 抽選エリア (Card) - lotteryContainerRef をここに紐付ける */}
-          <Card
-            ref={lotteryContainerRef}
-            className={`col-span-2 transition-all duration-300 ${
-              isFullscreen
-                ? "fixed inset-0 z-50 w-screen h-screen m-0 rounded-none border-0 flex flex-col justify-between bg-gradient-to-b from-purple-950 via-slate-950 to-black p-8"
-                : "border-purple-100 shadow-md"
-            }`}
-          >
-            <CardHeader className={isFullscreen ? "text-center py-4 border-b border-white/10" : ""}>
-              <CardTitle className={`flex items-center gap-2 ${isFullscreen ? "text-white justify-center text-2xl" : "text-purple-800"}`}>
+          {/* 抽選エリア (Card) - タイトル部分は全画面にしない */}
+          <Card className="col-span-2 border-purple-100 shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-purple-800">
                 <Users className="h-6 w-6 text-purple-500" />
                 抽選エリア
-                {isFullscreen && <span className="text-sm px-3 py-1 rounded-full bg-white/10 ml-2">Spaceキーでスタート!</span>}
               </CardTitle>
             </CardHeader>
-            <CardContent className={`flex-1 flex flex-col justify-center ${isFullscreen ? "p-0" : ""}`}>
+            <CardContent>
+              {/* lotteryContainerRef はここ（数字が回る画面＋操作ボタン）だけに紐付ける。
+                  全画面時にタイトルや他のカードは表示されず、この中身だけが画面全体に広がる。 */}
               <div
-                className={`relative flex flex-col items-center justify-center bg-gradient-to-b from-purple-900 to-black rounded-xl overflow-hidden transition-all duration-300 ${
-                  isFullscreen ? "h-[70vh] rounded-none border-y border-white/5" : "min-h-[400px] p-8"
+                ref={lotteryContainerRef}
+                className={`transition-all duration-300 ${
+                  isFullscreen
+                    ? "fixed inset-0 z-50 w-screen h-screen flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-purple-950 via-slate-950 to-black p-6"
+                    : ""
                 }`}
               >
-                {/* ドラムロールエフェクト改善：シングルで超綺麗に回るスロットリール */}
+                {isFullscreen && (
+                  <span className="text-white/70 text-sm px-3 py-1 rounded-full bg-white/10 shrink-0">
+                    Spaceキーでスタート！
+                  </span>
+                )}
+              <div
+                className={`relative flex flex-col items-center justify-center bg-gradient-to-b from-purple-900 to-black rounded-xl overflow-hidden transition-all duration-300 ${
+                  isFullscreen ? "w-full flex-1 rounded-2xl border border-white/5" : "min-h-[400px] p-8"
+                }`}
+              >
+                {/* ドラムロール：中央インジケーターの位置に本当の結果がぴったり止まる1列リール */}
                 {showDrumroll && (
                   <motion.div 
                     className="absolute inset-0 flex items-center justify-center overflow-hidden"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2 }}
                   >
                     <div className="relative w-full h-full max-h-[300px] overflow-hidden flex justify-center items-center">
                       {/* 上下のグラデーションシャドウ */}
@@ -617,19 +621,17 @@ export default function StudentPicker() {
                       <div className="relative w-full flex justify-center items-center h-full">
                         <motion.div
                           className="flex flex-col items-center absolute"
-                          initial={{ y: 0 }}
-                          animate={{
-                            y: [-2500, 0],
-                          }}
+                          initial={{ y: -3200, filter: "blur(5px)" }}
+                          animate={{ y: 0, filter: "blur(0px)" }}
                           transition={{
-                            duration: 1.5,
-                            ease: [0.15, 0.85, 0.35, 1],
+                            y: { duration: REEL_SPIN_DURATION, ease: [0.13, 0.9, 0.22, 1] },
+                            filter: { duration: REEL_SPIN_DURATION * 0.75, ease: "easeOut" },
                           }}
                         >
                           {rouletteNumbers.map((num, index) => (
                             <div
                               key={index}
-                              className={`font-black text-white transition-all duration-200 tabular-nums flex items-center justify-center ${
+                              className={`font-black text-white tabular-nums flex items-center justify-center ${
                                 isFullscreen ? "text-[12rem] h-[16rem] mb-4" : "text-8xl h-[10rem] mb-2"
                               }`}
                               style={{
@@ -646,19 +648,24 @@ export default function StudentPicker() {
                   </motion.div>
                 )}
 
-                {/* 最終結果の表示 */}
+                {/* 最終結果の表示（リールが止まった数字からそのまま滑らかに引き継ぐ） */}
                 <AnimatePresence>
                   {showFinalResult && tempSelectedStudent && (
                     <motion.div
-                      initial={{ scale: 0.3, opacity: 0, rotate: -5 }}
-                      animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                      exit={{ scale: 0.5, opacity: 0 }}
-                      transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                      initial={{ scale: 0.92, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.96, opacity: 0 }}
+                      transition={{ duration: 0.35, ease: "easeOut" }}
                       className="text-center z-10"
                     >
-                      <span className="text-yellow-400 font-bold text-lg mb-2 block tracking-widest animate-bounce">
+                      <motion.span
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1, duration: 0.3 }}
+                        className="text-yellow-400 font-bold text-lg mb-2 block tracking-widest"
+                      >
                         🎉 選ばれた生徒 🎉
-                      </span>
+                      </motion.span>
                       <motion.div
                         className={`font-black text-white leading-none tracking-tight tabular-nums ${
                           isFullscreen ? "text-[18rem]" : "text-[10rem]"
@@ -667,12 +674,13 @@ export default function StudentPicker() {
                           textShadow: "0 0 40px rgba(255,255,255,0.9), 0 0 80px rgba(168,85,247,0.8), 0 0 120px rgba(236,72,153,0.6)"
                         }}
                         animate={{
-                          scale: [1, 1.05, 1],
+                          scale: [1, 1.02, 1],
                         }}
                         transition={{
-                          duration: 2,
+                          duration: 3,
                           repeat: Infinity,
-                          repeatType: "reverse"
+                          repeatType: "reverse",
+                          ease: "easeInOut"
                         }}
                       >
                         {tempSelectedStudent.number}
@@ -704,12 +712,13 @@ export default function StudentPicker() {
                 {!showDrumroll && !showFinalResult && !selectedStudent && (
                   <motion.div
                     animate={{ 
-                      opacity: [0.4, 0.9, 0.4],
-                      scale: [0.95, 1.03, 0.95],
+                      opacity: [0.5, 0.9, 0.5],
+                      scale: [0.97, 1.02, 0.97],
                     }}
                     transition={{
-                      duration: 2,
+                      duration: 2.5,
                       repeat: Infinity,
+                      ease: "easeInOut"
                     }}
                     className={`font-black text-white/40 tracking-wider ${
                       isFullscreen ? "text-[12rem]" : "text-7xl"
@@ -722,7 +731,7 @@ export default function StudentPicker() {
               </div>
 
               {/* ボタン操作部分 */}
-              <div className={`flex justify-center items-center gap-4 ${isFullscreen ? "py-6 bg-slate-950 border-t border-white/10" : "mt-6"}`}>
+              <div className={`flex justify-center items-center gap-4 flex-wrap shrink-0 ${isFullscreen ? "pt-2" : "mt-6"}`}>
                 <Button
                   size="lg"
                   onClick={selectRandomStudent}
@@ -770,6 +779,7 @@ export default function StudentPicker() {
                   <RotateCcw className="mr-2 h-4 w-4" />
                   履歴・回数リセット
                 </Button>
+              </div>
               </div>
             </CardContent>
           </Card>
